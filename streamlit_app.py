@@ -72,8 +72,8 @@ def check_environment():
     issues = []
     
     # Check for .env file
-    if not os.path.exists('env'):
-        issues.append("⚠️ 'env' file not found. Please create it with GOOGLE_API_KEY and ENTREZ_EMAIL") 
+    #if not os.path.exists('env'):
+        #issues.append("⚠️ 'env' file not found. Please create it with GOOGLE_API_KEY and ENTREZ_EMAIL") 
     
     # Check for tools file
     if not os.path.exists('my_tools.py'):
