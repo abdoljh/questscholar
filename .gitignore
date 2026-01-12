@@ -1,11 +1,35 @@
+# ===================================
+# QuestScholar .gitignore
+# ===================================
+
+# ===================================
+# CRITICAL: SECRETS & API KEYS
+# ===================================
+env
+.env
+.env.local
+.env.*.local
+*.key
+secrets.toml
 .streamlit/secrets.toml
 
+# ===================================
+# GENERATED REPORTS & OUTPUT
+# ===================================
+executive_summary.pdf
+executive_summary.html
+*.pdf
+*.html
+reports/
+output/
+
+# ===================================
+# PYTHON
+# ===================================
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
 *$py.class
-
-# C extensions
 *.so
 
 # Distribution / packaging
@@ -22,6 +46,7 @@ parts/
 sdist/
 var/
 wheels/
+pip-wheel-metadata/
 share/python-wheels/
 *.egg-info/
 .installed.cfg
@@ -29,8 +54,6 @@ share/python-wheels/
 MANIFEST
 
 # PyInstaller
-#  Usually these files are written by a python script from a template
-#  before PyInstaller builds the exe, so as to inject date/other infos into it.
 *.manifest
 *.spec
 
@@ -51,7 +74,6 @@ coverage.xml
 *.py,cover
 .hypothesis/
 .pytest_cache/
-cover/
 
 # Translations
 *.mo
@@ -74,46 +96,23 @@ instance/
 docs/_build/
 
 # PyBuilder
-.pybuilder/
 target/
 
 # Jupyter Notebook
 .ipynb_checkpoints
+*-checkpoint.ipynb
 
 # IPython
 profile_default/
 ipython_config.py
 
 # pyenv
-#   For a library or package, you might want to ignore these files since the code is
-#   intended to run in multiple environments; otherwise, check them in:
-# .python-version
+.python-version
 
 # pipenv
-#   According to pypa/pipenv#598, it is recommended to include Pipfile.lock in version control.
-#   However, in case of collaboration, if having platform-specific dependencies or dependencies
-#   having no cross-platform support, pipenv may install dependencies that don't work, or not
-#   install all needed dependencies.
-#Pipfile.lock
+Pipfile.lock
 
-# poetry
-#   Similar to Pipfile.lock, it is generally recommended to include poetry.lock in version control.
-#   This is especially recommended for binary packages to ensure reproducibility, and is more
-#   commonly ignored for libraries.
-#   https://python-poetry.org/docs/basic-usage/#commit-your-poetrylock-file-to-version-control
-#poetry.lock
-
-# pdm
-#   Similar to Pipfile.lock, it is generally recommended to include pdm.lock in version control.
-#pdm.lock
-#   pdm stores project-wide configurations in .pdm.toml, but it is recommended to not include it
-#   in version control.
-#   https://pdm.fming.dev/latest/usage/project/#working-with-version-control
-.pdm.toml
-.pdm-python
-.pdm-build/
-
-# PEP 582; used by e.g. github.com/David-OConnor/pyflow and github.com/pdm-project/pdm
+# PEP 582
 __pypackages__/
 
 # Celery stuff
@@ -124,7 +123,6 @@ celerybeat.pid
 *.sage.py
 
 # Environments
-.env
 .venv
 env/
 venv/
@@ -150,15 +148,193 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
-# pytype static type analyzer
-.pytype/
+# ===================================
+# STREAMLIT
+# ===================================
+.streamlit/secrets.toml
+.streamlit/config.toml.local
 
-# Cython debug symbols
-cython_debug/
+# ===================================
+# IDEs & EDITORS
+# ===================================
+# VSCode
+.vscode/
+*.code-workspace
 
 # PyCharm
-#  JetBrains specific template is maintained in a separate JetBrains.gitignore that can
-#  be found at https://github.com/github/gitignore/blob/main/Global/JetBrains.gitignore
-#  and can be added to the global gitignore or merged into this file.  For a more nuclear
-#  option (not recommended) you can uncomment the following to ignore the entire idea folder.
-#.idea/
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# Vim
+*.swp
+*.swo
+*~
+.vim/
+
+# Emacs
+*~
+\#*\#
+/.emacs.desktop
+/.emacs.desktop.lock
+*.elc
+auto-save-list
+tramp
+.\#*
+
+# Atom
+.atom/
+
+# ===================================
+# OPERATING SYSTEMS
+# ===================================
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+*.stackdump
+[Dd]esktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+*.lnk
+
+# Linux
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
+
+# ===================================
+# TEMPORARY FILES
+# ===================================
+*.tmp
+*.temp
+*.bak
+*.swp
+*.swo
+*.orig
+*.rej
+temp/
+tmp/
+
+# ===================================
+# LOGS
+# ===================================
+*.log
+logs/
+*.log.*
+
+# ===================================
+# DATABASES
+# ===================================
+*.db
+*.sqlite
+*.sqlite3
+data/
+
+# ===================================
+# PROJECT SPECIFIC
+# ===================================
+# Logo variants (keep main logo in repo)
+*_logo_backup.*
+logo_old.*
+
+# Test files
+test_output/
+sandbox/
+experiments/
+
+# Cache directories
+.cache/
+cache/
+
+# Downloaded papers (if implementing caching)
+papers_cache/
+downloads/
+
+# User data
+user_data/
+sessions/
+
+# ===================================
+# DOCKER
+# ===================================
+docker-compose.override.yml
+.dockerignore
+
+# ===================================
+# CLOUD & DEPLOYMENT
+# ===================================
+# Terraform
+*.tfstate
+*.tfstate.*
+.terraform/
+
+# AWS
+.aws/
+
+# Google Cloud
+.gcloud/
+*-key.json
+
+# Azure
+.azure/
+
+# ===================================
+# MISC
+# ===================================
+# Compressed files (unless needed)
+*.zip
+*.tar.gz
+*.rar
+*.7z
+
+# Backups
+backup/
+backups/
+*.backup
+
+# Node (if using any JS tools)
+node_modules/
+package-lock.json
+yarn.lock
+
+# ===================================
+# KEEP THESE FILES
+# ===================================
+# Force include important files that might match patterns above
+!README.md
+!README_STREAMLIT.md
+!requirements*.txt
+!.streamlit/config.toml.example
+!QuestScholar_logo.PNG
