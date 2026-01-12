@@ -418,7 +418,8 @@ async def run_workflow(subject, start_year, end_year, source_limits, progress_ba
 
 # Header
 st.markdown('<h1 class="main-header">🎓 QuestScholar</h1>', unsafe_allow_html=True)
-st.markdown('<p class="sub-header">Hunt Smarter, Research Deeper</p>', unsafe_allow_html=True)
+#st.markdown('<p class="sub-header">Hunt Smarter, Research Deeper</p>', unsafe_allow_html=True)
+st.markdown('<h2 class="sub-header">Hunt Smarter, Research Deeper</h2>', unsafe_allow_html=True)
 
 # Check environment
 with st.expander("🔧 System Status", expanded=False):
