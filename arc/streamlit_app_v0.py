@@ -1,0 +1,523 @@
+import streamlit as st
+import asyncio
+import os
+import json
+from pathlib import Path
+from datetime import datetime
+import importlib
+
+# Page configuration
+st.set_page_config(
+    page_title="QuestScholar - Research Analysis",
+    page_icon="🎓",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+# Custom CSS
+st.markdown("""
+<style>
+    .main-header {
+        font-size: 3rem;
+        color: #667eea;
+        text-align: center;
+        margin-bottom: 0.5rem;
+    }
+    .sub-header {
+        font-size: 1.5rem;
+        color: #ff6b35;
+        text-align: center;
+        font-style: italic;
+        margin-bottom: 2rem;
+    }
+    .stProgress > div > div > div > div {
+        background-color: #667eea;
+    }
+    .success-box {
+        padding: 1rem;
+        border-radius: 0.5rem;
+        background-color: #d4edda;
+        border: 1px solid #c3e6cb;
+        margin: 1rem 0;
+    }
+    .error-box {
+        padding: 1rem;
+        border-radius: 0.5rem;
+        background-color: #f8d7da;
+        border: 1px solid #f5c6cb;
+        margin: 1rem 0;
+    }
+    .info-box {
+        padding: 1rem;
+        border-radius: 0.5rem;
+        background-color: #d1ecf1;
+        border: 1px solid #bee5eb;
+        margin: 1rem 0;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+# Initialize session state
+if 'workflow_running' not in st.session_state:
+    st.session_state.workflow_running = False
+if 'execution_logs' not in st.session_state:
+    st.session_state.execution_logs = []
+if 'results' not in st.session_state:
+    st.session_state.results = None
+if 'statistics' not in st.session_state:
+    st.session_state.statistics = None
+
+def check_environment():
+    """Check if required environment variables and files exist"""
+    issues = []
+    
+    # Check for .env file
+    #if not os.path.exists('env'):
+        #issues.append("⚠️ 'env' file not found. Please create it with GOOGLE_API_KEY and ENTREZ_EMAIL")
+    
+    # Check for tools file
+    if not os.path.exists('my_tools.py'):
+        issues.append("⚠️ 'my_tools.py' not found")
+    
+    # Check for requirements
+    try:
+        import google.adk
+        import semanticscholar
+        import arxiv
+        from Bio import Entrez
+        from reportlab.lib.pagesizes import A4
+    except ImportError as e:
+        issues.append(f"⚠️ Missing dependency: {str(e)}")
+    
+    return issues
+
+def load_environment():
+    """Load environment variables"""
+    from dotenv import load_dotenv
+    
+    env_path = os.path.join(os.getcwd(), 'env')
+    if os.path.exists(env_path):
+        load_dotenv(dotenv_path=env_path, override=True)
+        return True
+    return False
+
+def initialize_tools():
+    """Initialize all research tools"""
+    import my_tools
+    importlib.reload(my_tools)
+    
+    from my_tools import (
+        SemanticScholarTool, PubMedTool, ArXivTool, OpenAlexTool,
+        CriticTool, PDFReportTool, HTMLReportTool
+    )
+    from google.adk.tools import FunctionTool
+    
+    # Instantiate tools
+    tools = {
+        'semantic': SemanticScholarTool(),
+        'pubmed': PubMedTool(),
+        'arxiv': ArXivTool(),
+        'openalex': OpenAlexTool(),
+        'critic': CriticTool(),
+        'pdf': PDFReportTool(),
+        'html': HTMLReportTool()
+    }
+    
+    # Wrap with FunctionTool
+    wrapped_tools = {
+        'semantic_tool': FunctionTool(tools['semantic'].search),
+        'pubmed_tool': FunctionTool(tools['pubmed'].search),
+        'arxiv_tool': FunctionTool(tools['arxiv'].search),
+        'openalex_tool': FunctionTool(tools['openalex'].search),
+        'critic_eval_tool': FunctionTool(tools['critic'].evaluate_papers),
+        'critic_get_tool': FunctionTool(tools['critic'].get_papers_for_evaluation),
+        'dedupe_tool': FunctionTool(tools['critic'].deduplicate_collection),
+        'pdf_tool': FunctionTool(tools['pdf'].generate_report),
+        'html_tool': FunctionTool(tools['html'].generate_html_report)
+    }
+    
+    return tools, wrapped_tools
+
+def create_agents(wrapped_tools, retry_config):
+    """Create all agent instances"""
+    from google.adk.agents import Agent, SequentialAgent, ParallelAgent
+    from google.adk.models.google_llm import Gemini
+    
+    # Search agents
+    semantic_researcher = Agent(
+        name="SemanticResearcher",
+        model=Gemini(model="gemini-flash-latest", retry_options=retry_config),
+        instruction="You are the Semantic Scholar specialist. Search for papers using ONLY the search tool. Find papers matching the subject and year range. Report exact number of papers found. Format: 'Semantic Scholar: Added N papers.'",
+        tools=[wrapped_tools['semantic_tool']],
+        output_key="semantic_research"
+    )
+    
+    pubmed_researcher = Agent(
+        name="PubMedResearcher",
+        model=Gemini(model="gemini-flash-latest", retry_options=retry_config),
+        instruction="You are the PubMed specialist. Search for papers using ONLY the search tool. Find papers matching the subject and year range. Report exact number of papers found. Format: 'PubMed: Added N papers.'",
+        tools=[wrapped_tools['pubmed_tool']],
+        output_key="pubmed_research"
+    )
+    
+    arxiv_researcher = Agent(
+        name="ArxivResearcher",
+        model=Gemini(model="gemini-flash-latest", retry_options=retry_config),
+        instruction="You are the arXiv specialist. Search for papers using ONLY the search tool. Find papers matching the subject and year range. Report exact number of papers found. Format: 'arXiv: Added N papers.'",
+        tools=[wrapped_tools['arxiv_tool']],
+        output_key="arxiv_research"
+    )
+    
+    openalex_researcher = Agent(
+        name="OpenAlexResearcher",
+        model=Gemini(model="gemini-flash-latest", retry_options=retry_config),
+        instruction="You are the OpenAlex specialist. Search for papers using ONLY the search tool. Find papers matching the subject and year range. Report exact number of papers found. Format: 'OpenAlex: Added N papers.'",
+        tools=[wrapped_tools['openalex_tool']],
+        output_key="openalex_research"
+    )
+    
+    # Aggregator Phase 1
+    aggregator_phase1 = Agent(
+        name="AggregatorPhase1",
+        model=Gemini(model="gemini-flash-latest", retry_options=retry_config),
+        instruction="You are the Initial Aggregation Coordinator. CALL 'deduplicate_collection' immediately. Collect search results from all researchers. Accept partial results. Normalize metadata. Prepare summary for critic evaluation.",
+        tools=[wrapped_tools['dedupe_tool']],
+        output_key="aggregation_phase1"
+    )
+    
+    # Critic workflow
+    critic_fetcher = Agent(
+        name="CriticFetcher",
+        model=Gemini(model="gemini-pro-latest", retry_options=retry_config),
+        instruction="Call get_papers_for_evaluation() and return the complete JSON response.",
+        tools=[wrapped_tools['critic_get_tool']],
+        output_key="papers_json"
+    )
+    
+    critic_evaluator = Agent(
+        name="CriticEvaluator",
+        model=Gemini(model="gemini-pro-latest", retry_options=retry_config, generation_config={"temperature": 0.1}),
+        instruction="""You received papers in JSON. Evaluate ALL of them.
+
+SCORING GUIDE:
+Relevance (0-5): 5=Core research, 4=Directly relevant, 3=Mentions topic, 2=Tangential, 1=Generic
+Methodology (0-5): 5=RCT/large cohort/systematic review, 4=Well-designed, 3=Adequate, 2=Weak, 1=Poor
+Impact (0-5): 5=100+ citations, 4=50-99, 3=10-49, 2=1-9, 1=No citations
+
+FLAGS: review, meta_analysis, clinical_trial, case_report, guideline, preprint, genomics, targeted_therapy
+
+For EACH paper create:
+{
+  "paper_title": "exact title",
+  "relevance_score": NUMBER,
+  "methodological_soundness": NUMBER,
+  "impact_score": NUMBER,
+  "redundancy_flag": false,
+  "flags": ["tag1"],
+  "recommended_action": "include" or "exclude",
+  "rationale": "Brief explanation"
+}
+
+Call evaluate_papers([...all evaluations...]) NOW. Do not write text. ONLY call the tool.""",
+        tools=[wrapped_tools['critic_eval_tool']],
+        output_key="evaluations"
+    )
+    
+    critic_workflow = SequentialAgent(
+        name="CriticWorkflow",
+        sub_agents=[critic_fetcher, critic_evaluator]
+    )
+    
+    # Report generation
+    pdf_reporter = Agent(
+        name="PDFReporter",
+        model=Gemini(model="gemini-pro-latest", retry_options=retry_config),
+        instruction="Generate PDF report. Synthesize 250-word Executive Summary covering: key themes, methodological trends, high-impact contributions, quality metrics. Call 'generate_report'.",
+        tools=[wrapped_tools['pdf_tool']],
+        output_key="pdf_report_status"
+    )
+    
+    html_reporter = Agent(
+        name="HTMLReporter",
+        model=Gemini(model="gemini-pro-latest", retry_options=retry_config),
+        instruction="Generate interactive HTML report. Use SAME executive summary as PDF. Call 'generate_html_report'.",
+        tools=[wrapped_tools['html_tool']],
+        output_key="html_report_status"
+    )
+    
+    report_generation = ParallelAgent(
+        name="ReportGeneration",
+        sub_agents=[pdf_reporter, html_reporter]
+    )
+    
+    # Assemble workflow
+    parallel_research = ParallelAgent(
+        name="ParallelResearchTeam",
+        sub_agents=[semantic_researcher, pubmed_researcher, arxiv_researcher, openalex_researcher]
+    )
+    
+    root_agent = SequentialAgent(
+        name="ResearchSystem",
+        sub_agents=[parallel_research, aggregator_phase1, critic_workflow, report_generation]
+    )
+    
+    return root_agent
+
+async def run_workflow(subject, start_year, end_year, source_limits, progress_bar, status_text, log_container):
+    """Execute the research workflow"""
+    from google.adk.runners import InMemoryRunner
+    from google.genai import types
+    import my_tools
+    
+    # Clear previous data
+    importlib.reload(my_tools)
+    my_tools.clear_papers()
+    
+    # Load environment
+    if not load_environment():
+        st.error("Failed to load environment variables")
+        return None
+    
+    # Retry configuration
+    retry_config = types.HttpRetryOptions(
+        attempts=5,
+        exp_base=7,
+        initial_delay=1,
+        http_status_codes=[429, 500, 503, 504]
+    )
+    
+    # Initialize tools and agents
+    status_text.text("🔧 Initializing tools and agents...")
+    progress_bar.progress(5)
+    
+    tools, wrapped_tools = initialize_tools()
+    root_agent = create_agents(wrapped_tools, retry_config)
+    
+    # Construct prompt
+    prompt = (
+        f"Conduct a comprehensive research analysis on '{subject}' for years {start_year}-{end_year}.\n\n"
+        f"PHASE 1 - PARALLEL SEARCH:\n"
+        f"  • SemanticResearcher: Find {source_limits['semantic_scholar']} papers\n"
+        f"  • PubMedResearcher: Find {source_limits['pubmed']} papers\n"
+        f"  • ArxivResearcher: Find {source_limits['arxiv']} papers\n"
+        f"  • OpenAlexResearcher: Find {source_limits['openalex']} papers\n\n"
+        f"PHASE 2 - AGGREGATION: Deduplicate and normalize\n"
+        f"PHASE 3 - CRITIC: Evaluate quality\n"
+        f"PHASE 4 - REPORTS: Generate PDF and HTML\n\n"
+        f"Begin now."
+    )
+    
+    # Execute workflow
+    status_text.text("🚀 Executing research workflow...")
+    progress_bar.progress(10)
+    
+    runner = InMemoryRunner(agent=root_agent)
+    response = None
+    error = None
+    
+    try:
+        # Capture logs
+        class StreamlitLogger:
+            def __init__(self, log_container):
+                self.log_container = log_container
+                self.logs = []
+            
+            def write(self, text):
+                if text.strip():
+                    self.logs.append(text.strip())
+                    with self.log_container:
+                        st.text(text.strip())
+        
+        import sys
+        old_stdout = sys.stdout
+        logger = StreamlitLogger(log_container)
+        
+        # Run workflow
+        response = await runner.run_debug(prompt, verbose=True)
+        
+        sys.stdout = old_stdout
+        progress_bar.progress(90)
+        
+    except Exception as e:
+        error = e
+        sys.stdout = old_stdout
+    
+    # Get statistics
+    status_text.text("📊 Calculating statistics...")
+    progress_bar.progress(95)
+    
+    stats = {
+        'total_collected': len(my_tools.COLLECTED_PAPERS),
+        'total_evaluated': len(my_tools.CRITIC_EVALUATIONS),
+        'high_rated': 0,
+        'excluded': 0,
+        'avg_relevance': 0,
+        'avg_methodology': 0,
+        'avg_impact': 0
+    }
+    
+    if stats['total_evaluated'] > 0:
+        evals = my_tools.CRITIC_EVALUATIONS.values()
+        stats['high_rated'] = sum(1 for e in evals if e['overall_score'] >= 4.0)
+        stats['excluded'] = sum(1 for e in evals if e['recommended_action'] == 'exclude')
+        stats['avg_relevance'] = sum(e['relevance_score'] for e in evals) / stats['total_evaluated']
+        stats['avg_methodology'] = sum(e['methodological_soundness'] for e in evals) / stats['total_evaluated']
+        stats['avg_impact'] = sum(e['impact_score'] for e in evals) / stats['total_evaluated']
+    
+    progress_bar.progress(100)
+    status_text.text("✅ Workflow complete!")
+    
+    return {
+        'response': response,
+        'error': error,
+        'statistics': stats,
+        'logs': logger.logs if 'logger' in locals() else []
+    }
+
+# Header
+st.markdown('<h1 class="main-header">🎓 QuestScholar</h1>', unsafe_allow_html=True)
+st.markdown('<p class="sub-header">Hunt Smarter, Research Deeper</p>', unsafe_allow_html=True)
+
+# Check environment
+with st.expander("🔧 System Status", expanded=False):
+    issues = check_environment()
+    if issues:
+        for issue in issues:
+            st.warning(issue)
+    else:
+        st.success("✅ All dependencies and files found")
+
+# Sidebar configuration
+st.sidebar.header("🎯 Research Configuration")
+
+subject = st.sidebar.text_input(
+    "Research Subject",
+    value="Langerhans Cell Histiocytosis",
+    help="Enter the topic you want to research"
+)
+
+col1, col2 = st.sidebar.columns(2)
+with col1:
+    start_year = st.number_input("Start Year", min_value=1900, max_value=2026, value=2021)
+with col2:
+    end_year = st.number_input("End Year", min_value=1900, max_value=2026, value=2026)
+
+st.sidebar.subheader("📚 Papers per Source")
+semantic_limit = st.sidebar.slider("Semantic Scholar", 1, 20, 7)
+pubmed_limit = st.sidebar.slider("PubMed", 1, 20, 7)
+arxiv_limit = st.sidebar.slider("arXiv", 1, 20, 7)
+openalex_limit = st.sidebar.slider("OpenAlex", 1, 20, 7)
+
+source_limits = {
+    'semantic_scholar': semantic_limit,
+    'pubmed': pubmed_limit,
+    'arxiv': arxiv_limit,
+    'openalex': openalex_limit
+}
+
+st.sidebar.markdown("---")
+run_button = st.sidebar.button("🚀 Start Research", type="primary", disabled=st.session_state.workflow_running)
+
+# Main content area
+if run_button and not st.session_state.workflow_running:
+    st.session_state.workflow_running = True
+    st.session_state.execution_logs = []
+    st.session_state.results = None
+    st.session_state.statistics = None
+    
+    # Progress indicators
+    progress_bar = st.progress(0)
+    status_text = st.empty()
+    
+    # Execution log
+    with st.expander("📋 Execution Log", expanded=True):
+        log_container = st.container()
+    
+    # Run workflow
+    results = asyncio.run(
+        run_workflow(subject, start_year, end_year, source_limits, progress_bar, status_text, log_container)
+    )
+    
+    st.session_state.results = results
+    st.session_state.statistics = results['statistics']
+    st.session_state.workflow_running = False
+    
+    # Clean up progress indicators
+    progress_bar.empty()
+    status_text.empty()
+
+# Display results
+if st.session_state.results:
+    results = st.session_state.results
+    
+    if results['error']:
+        st.markdown('<div class="error-box">❌ <b>Workflow Error</b><br>' + str(results['error']) + '</div>', unsafe_allow_html=True)
+    else:
+        st.markdown('<div class="success-box">✅ <b>Research Complete!</b></div>', unsafe_allow_html=True)
+        
+        # Statistics
+        st.subheader("📊 Collection Statistics")
+        stats = results['statistics']
+        
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            st.metric("Papers Collected", stats['total_collected'])
+        with col2:
+            st.metric("Evaluated", stats['total_evaluated'])
+        with col3:
+            st.metric("High-Rated (≥4.0)", stats['high_rated'])
+        with col4:
+            st.metric("Excluded", stats['excluded'])
+        
+        if stats['total_evaluated'] > 0:
+            st.subheader("📈 Average Quality Scores")
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("Relevance", f"{stats['avg_relevance']:.2f}/5.0")
+            with col2:
+                st.metric("Methodology", f"{stats['avg_methodology']:.2f}/5.0")
+            with col3:
+                st.metric("Impact", f"{stats['avg_impact']:.2f}/5.0")
+        
+        # Download reports
+        st.subheader("📥 Download Reports")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            if os.path.exists('executive_summary.pdf'):
+                with open('executive_summary.pdf', 'rb') as f:
+                    st.download_button(
+                        label="📄 Download PDF Report",
+                        data=f,
+                        file_name=f"QuestScholar_{subject.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d')}.pdf",
+                        mime="application/pdf"
+                    )
+            else:
+                st.warning("PDF report not generated")
+        
+        with col2:
+            if os.path.exists('executive_summary.html'):
+                with open('executive_summary.html', 'r', encoding='utf-8') as f:
+                    st.download_button(
+                        label="🌐 Download HTML Report",
+                        data=f,
+                        file_name=f"QuestScholar_{subject.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d')}.html",
+                        mime="text/html"
+                    )
+            else:
+                st.warning("HTML report not generated")
+
+# Footer
+st.sidebar.markdown("---")
+st.sidebar.markdown("""
+### About QuestScholar
+**Version:** 4.00  
+**Website:** [questscholar.com](https://www.questscholar.com) (Under Construction)
+
+**Features:**
+- Multi-source paper collection
+- AI-powered quality evaluation
+- Interactive HTML reports
+- Professional PDF exports
+""")
