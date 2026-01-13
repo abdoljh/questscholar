@@ -73,7 +73,7 @@ def check_environment():
     
     # Check for .env file
     #if not os.path.exists('env'):
-        #issues.append("⚠️ 'env' file not found. Please create it with GOOGLE_API_KEY and ENTREZ_EMAIL") 
+        #issues.append("⚠️ 'env' file not found. Please create it with GOOGLE_API_KEY and ENTREZ_MAIL")
     
     # Check for tools file
     if not os.path.exists('my_tools.py'):
@@ -97,7 +97,7 @@ def load_environment():
         # Try Streamlit secrets first (for cloud deployment)
         if hasattr(st, 'secrets') and 'GOOGLE_API_KEY' in st.secrets:
             os.environ['GOOGLE_API_KEY'] = st.secrets['GOOGLE_API_KEY']
-            os.environ['ENTREZ_EMAIL'] = st.secrets.get('ENTREZ_EMAIL', 'default@example.com')
+            os.environ['ENTREZ_MAIL'] = st.secrets.get('ENTREZ_MAIL', 'default@example.com')
             return True
     except Exception:
         pass
@@ -156,44 +156,44 @@ def create_agents(wrapped_tools, retry_config):
     from google.adk.agents import Agent, SequentialAgent, ParallelAgent
     from google.adk.models.google_llm import Gemini
     
-    # Search agents
+    # Search agents (optimized with concise instructions)
     semantic_researcher = Agent(
         name="SemanticResearcher",
-        model=Gemini(model="gemini-flash-latest", retry_options=retry_config),
-        instruction="You are the Semantic Scholar specialist. Search for papers using ONLY the search tool. Find papers matching the subject and year range. Report exact number of papers found. Format: 'Semantic Scholar: Added N papers.'",
+        model=Gemini(model="gemini-2.0-flash-exp", retry_options=retry_config),  # Faster model
+        instruction="Search Semantic Scholar. Use search tool. Report: 'Semantic Scholar: Added N papers.'",
         tools=[wrapped_tools['semantic_tool']],
         output_key="semantic_research"
     )
     
     pubmed_researcher = Agent(
         name="PubMedResearcher",
-        model=Gemini(model="gemini-flash-latest", retry_options=retry_config),
-        instruction="You are the PubMed specialist. Search for papers using ONLY the search tool. Find papers matching the subject and year range. Report exact number of papers found. Format: 'PubMed: Added N papers.'",
+        model=Gemini(model="gemini-2.0-flash-exp", retry_options=retry_config),
+        instruction="Search PubMed. Use search tool. Report: 'PubMed: Added N papers.'",
         tools=[wrapped_tools['pubmed_tool']],
         output_key="pubmed_research"
     )
     
     arxiv_researcher = Agent(
         name="ArxivResearcher",
-        model=Gemini(model="gemini-flash-latest", retry_options=retry_config),
-        instruction="You are the arXiv specialist. Search for papers using ONLY the search tool. Find papers matching the subject and year range. Report exact number of papers found. Format: 'arXiv: Added N papers.'",
+        model=Gemini(model="gemini-2.0-flash-exp", retry_options=retry_config),
+        instruction="Search arXiv. Use search tool. Report: 'arXiv: Added N papers.'",
         tools=[wrapped_tools['arxiv_tool']],
         output_key="arxiv_research"
     )
     
     openalex_researcher = Agent(
         name="OpenAlexResearcher",
-        model=Gemini(model="gemini-flash-latest", retry_options=retry_config),
-        instruction="You are the OpenAlex specialist. Search for papers using ONLY the search tool. Find papers matching the subject and year range. Report exact number of papers found. Format: 'OpenAlex: Added N papers.'",
+        model=Gemini(model="gemini-2.0-flash-exp", retry_options=retry_config),
+        instruction="Search OpenAlex. Use search tool. Report: 'OpenAlex: Added N papers.'",
         tools=[wrapped_tools['openalex_tool']],
         output_key="openalex_research"
     )
     
-    # Aggregator Phase 1
+    # Aggregator Phase 1 (optimized)
     aggregator_phase1 = Agent(
         name="AggregatorPhase1",
-        model=Gemini(model="gemini-flash-latest", retry_options=retry_config),
-        instruction="You are the Initial Aggregation Coordinator. CALL 'deduplicate_collection' immediately. Collect search results from all researchers. Accept partial results. Normalize metadata. Prepare summary for critic evaluation.",
+        model=Gemini(model="gemini-2.0-flash-exp", retry_options=retry_config),
+        instruction="Call deduplicate_collection tool. Report deduplication results.",
         tools=[wrapped_tools['dedupe_tool']],
         output_key="aggregation_phase1"
     )
@@ -416,9 +416,35 @@ async def run_workflow(subject, start_year, end_year, source_limits, progress_ba
         }
     }
 
-# Header
-st.markdown('<h1 class="main-header">🎓 QuestScholar</h1>', unsafe_allow_html=True)
-st.markdown('<p class="sub-header">Hunt Smarter, Research Deeper</p>', unsafe_allow_html=True)
+# Header with logo
+logo_col, title_col = st.columns([1, 4])
+
+with logo_col:
+    # Try to display logo with multiple fallback paths
+    logo_found = False
+    logo_paths = [
+        'QuestScholar_logo.PNG',
+        'questscholar_logo.png',
+        'logo.png',
+        'QuestScholar_logo.png'
+    ]
+    
+    for logo_path in logo_paths:
+        if os.path.exists(logo_path):
+            try:
+                st.image(logo_path, width=150)
+                logo_found = True
+                break
+            except Exception:
+                continue
+    
+    if not logo_found:
+        # Display emoji as fallback
+        st.markdown('<div style="font-size: 100px; text-align: center;">🎓</div>', unsafe_allow_html=True)
+
+with title_col:
+    st.markdown('<h1 class="main-header">QuestScholar</h1>', unsafe_allow_html=True)
+    st.markdown('<p class="sub-header">Hunt Smarter, Research Deeper</p>', unsafe_allow_html=True)
 
 # Check environment
 with st.expander("🔧 System Status", expanded=False):
@@ -435,7 +461,7 @@ st.sidebar.header("🎯 Research Configuration")
 subject = st.sidebar.text_input(
     "Research Subject",
     value="Langerhans Cell Histiocytosis",
-    help="Enter the topic you want to research"
+    help="💡 Tip: Be specific! 'BRAF mutations in melanoma' > 'cancer research'"
 )
 
 col1, col2 = st.sidebar.columns(2)
@@ -530,14 +556,14 @@ if st.session_state.results:
                ```toml
                # In Streamlit Cloud secrets
                GOOGLE_API_KEY = "your_key_here"
-               ENTREZ_EMAIL = "your_email@example.com"
+               ENTREZ_MAIL = "your_email@example.com"
                ```
             
             3. **Local Setup:**
                ```bash
                # Create env file
                echo 'GOOGLE_API_KEY=your_key_here' > env
-               echo 'ENTREZ_EMAIL=your@email.com' >> env
+               echo 'ENTREZ_MAIL=your@email.com' >> env
                ```
             
             4. **Verify your API key:**
@@ -718,7 +744,7 @@ else:
             
             ```toml
             GOOGLE_API_KEY = "your_google_api_key_here"
-            ENTREZ_EMAIL = "your_email@example.com"
+            ENTREZ_MAIL = "your_email@example.com"
             ```
             
             **Step 2: Get Google API Key**
@@ -742,7 +768,7 @@ else:
             # Create env file (no extension!)
             cat > env << EOF
             GOOGLE_API_KEY=your_google_api_key_here
-            ENTREZ_EMAIL=your_email@example.com
+            ENTREZ_MAIL=your_email@example.com
             EOF
             ```
             
@@ -786,6 +812,38 @@ else:
             - Neural network architectures
             - Cybersecurity frameworks
             """)
+    
+    # Tips for better results
+    with st.expander("🎯 Tips for High-Quality Results"):
+        st.markdown("""
+        **To get better quality scores (3.5+):**
+        
+        ✅ **DO:**
+        - Use specific terms: "BRAF V600E mutations" not "cancer"
+        - Include methodology: "randomized controlled trial diabetes"
+        - Specify outcomes: "COVID-19 vaccine efficacy children"
+        - Recent years work best: 2020-2026
+        - Start with 5-7 papers per source
+        
+        ❌ **AVOID:**
+        - Too broad: "medicine", "technology", "research"
+        - Too narrow: "XYZ-123 protein in cell line ABC"
+        - Mixing unrelated topics: "AI and climate and health"
+        - Very old date ranges: 1950-1970
+        
+        **Quality Score Breakdown:**
+        - **4.5+** (⭐⭐ Exceptional): Landmark studies, RCTs, 100+ citations
+        - **4.0-4.4** (⭐ Excellent): High-quality research, 50+ citations
+        - **3.5-3.9** (✓ Good): Solid contributions, well-designed
+        - **3.0-3.4** (○ Acceptable): Standard research
+        - **<3.0** (⚠️ Low): Consider refining your search
+        
+        **Example transformations:**
+        - ❌ "heart disease" → ✅ "atrial fibrillation anticoagulation therapy"
+        - ❌ "AI" → ✅ "transformer models natural language processing"
+        - ❌ "rare diseases" → ✅ "Langerhans cell histiocytosis BRAF mutations"
+        """)
+
 
 # Footer
 st.sidebar.markdown("---")
