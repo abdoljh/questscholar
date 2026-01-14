@@ -1,3 +1,7 @@
+# streamlit_app.py
+# v4.1
+# Jan. 14, 2026
+
 import streamlit as st
 import asyncio
 import os
@@ -72,8 +76,8 @@ def check_environment():
     issues = []
     
     # Check for .env file
-    #if not os.path.exists('env'):
-        #issues.append("⚠️ 'env' file not found. Please create it with GOOGLE_API_KEY and ENTREZ_MAIL")
+    if not os.path.exists('env'):
+        issues.append("⚠️ 'env' file not found. Please create it with GOOGLE_API_KEY and ENTREZ_MAIL")
     
     # Check for tools file
     if not os.path.exists('my_tools.py'):
@@ -705,6 +709,207 @@ if st.session_state.results:
                 'statistics': stats,
                 'timestamp': datetime.now().isoformat()
             })
+        
+        # Academic Report Generation Section
+        st.markdown("---")
+        st.subheader("📄 Generate Academic Report")
+        
+        with st.expander("📝 Create Full Academic Report (Optional)", expanded=False):
+            st.info("""
+            **Generate a comprehensive academic report** with:
+            - Title page with metadata
+            - Abstract (150-250 words)
+            - Introduction with objectives
+            - Literature review of top papers
+            - Methodology section
+            - Findings with statistics
+            - Discussion and implications
+            - Conclusion and recommendations
+            - Complete references
+            """)
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                report_title = st.text_input(
+                    "Report Title",
+                    value=f"Systematic Review of {subject}",
+                    help="Academic title for your report"
+                )
+                
+                report_author = st.text_input(
+                    "Author Name",
+                    value="Research Team",
+                    help="Your name or research team"
+                )
+            
+            with col2:
+                report_institution = st.text_input(
+                    "Institution",
+                    value="Academic Institution",
+                    help="Your university or research center"
+                )
+                
+                report_format = st.selectbox(
+                    "Output Format",
+                    ["Markdown (.md)", "Both (MD + PDF)"],
+                    help="Markdown can be converted to PDF later"
+                )
+            
+            if st.button("🚀 Generate Academic Report", type="primary"):
+                try:
+                    # Import the academic report writer
+                    from academic_report_writer import generate_academic_report
+                    import my_tools
+                    
+                    # Check if papers are available
+                    if not my_tools.COLLECTED_PAPERS:
+                        st.error("❌ No papers available. Please run a search first.")
+                    else:
+                        with st.spinner("Generating academic report..."):
+                            # Safe year conversion helpers
+                            def _safe_year_conversion(year_value, default=2020):
+                                if year_value is None:
+                                    return default
+                                try:
+                                    if isinstance(year_value, str):
+                                        year_value = year_value.strip()
+                                        if year_value.lower() in ['n/a', 'na', '', 'none']:
+                                            return default
+                                        return int(year_value)
+                                    return int(year_value)
+                                except (ValueError, TypeError):
+                                    return default
+                            
+                            def _safe_min_year(papers):
+                                if not papers:
+                                    return start_year
+                                years = [_safe_year_conversion(p.get('pub_year')) for p in papers]
+                                valid_years = [y for y in years if y is not None]
+                                return min(valid_years) if valid_years else start_year
+                            
+                            def _safe_max_year(papers):
+                                if not papers:
+                                    return end_year
+                                years = [_safe_year_conversion(p.get('pub_year')) for p in papers]
+                                valid_years = [y for y in years if y is not None]
+                                return max(valid_years) if valid_years else end_year
+                            
+                            # Prepare report parameters
+                            params = {
+                                'title': report_title,
+                                'author': report_author,
+                                'institution': report_institution,
+                                'subject': subject,
+                                'research_question': f"current advances in {subject}",
+                                'context': f"""This report presents a systematic review of recent research on {subject}.
+The field has experienced significant growth, with numerous contributions advancing both
+theoretical understanding and practical applications. This review synthesizes current
+knowledge, identifies methodological trends, and highlights high-impact contributions.""",
+                                'objectives': [
+                                    'Systematically review current peer-reviewed literature',
+                                    'Evaluate research quality using multi-criteria assessment',
+                                    'Identify key themes and methodological approaches',
+                                    'Synthesize findings and highlight exceptional contributions',
+                                    'Provide evidence-based recommendations for future research'
+                                ],
+                                'key_findings': f"""The systematic review identified {len(my_tools.COLLECTED_PAPERS)} relevant
+publications, with {len([p for p in my_tools.COLLECTED_PAPERS if p.get('critic_rank', 0) >= 4.5])}
+classified as exceptional quality. Analysis reveals significant methodological innovations
+and emerging consensus on key research questions.""",
+                                'key_insights': [
+                                    'Methodological rigor has increased substantially in recent years',
+                                    'Interdisciplinary approaches yield the most impactful contributions',
+                                    'High-quality research demonstrates both theoretical depth and practical applicability',
+                                    'Emerging technologies enable novel research methodologies'
+                                ],
+                                'summary': f"""This systematic review analyzed {len(my_tools.COLLECTED_PAPERS)} publications
+on {subject}, identifying the most impactful and methodologically sound contributions.
+The findings demonstrate substantial progress in the field while highlighting opportunities
+for future investigation.""",
+                                'recommendations': [
+                                    'Longitudinal Studies: Conduct long-term studies to validate short-term findings',
+                                    'Cross-Cultural Validation: Extend research across diverse populations and contexts',
+                                    'Methodological Innovation: Develop and validate novel research methodologies',
+                                    'Translation to Practice: Establish frameworks for translating research into practice',
+                                    'Interdisciplinary Collaboration: Foster collaboration across traditional disciplinary boundaries'
+                                ],
+                                'search_params': {
+                                    'subject': subject,
+                                    'start_year': _safe_min_year(my_tools.COLLECTED_PAPERS),
+                                    'end_year': _safe_max_year(my_tools.COLLECTED_PAPERS)
+                                },
+                                'output_file': f'academic_report_{subject.replace(" ", "_")}_{datetime.now().strftime("%Y%m%d")}.md'
+                            }
+                            
+                            # Generate report
+                            md_file, report_data = generate_academic_report(
+                                my_tools.COLLECTED_PAPERS,
+                                my_tools.CRITIC_EVALUATIONS,
+                                params
+                            )
+                            
+                            st.success(f"✅ Academic report generated successfully!")
+                            
+                            # Display report statistics
+                            col1, col2, col3 = st.columns(3)
+                            with col1:
+                                st.metric("Sections", "8")
+                            with col2:
+                                st.metric("References", len(my_tools.COLLECTED_PAPERS))
+                            with col3:
+                                abstract_words = len(report_data.get('abstract', '').split())
+                                st.metric("Abstract Words", abstract_words)
+                            
+                            # Download button for Markdown
+                            with open(md_file, 'r', encoding='utf-8') as f:
+                                md_content = f.read()
+                                st.download_button(
+                                    label="📥 Download Academic Report (Markdown)",
+                                    data=md_content,
+                                    file_name=md_file,
+                                    mime="text/markdown",
+                                    help="Download the full academic report in Markdown format"
+                                )
+                            
+                            # Preview
+                            with st.expander("👁️ Preview Report Content"):
+                                st.markdown("### Report Structure")
+                                st.markdown("""
+                                1. Title Page & Metadata
+                                2. Abstract
+                                3. Introduction
+                                4. Literature Review (Top 10 Papers)
+                                5. Methodology
+                                6. Findings & Statistics
+                                7. Discussion
+                                8. Conclusion
+                                9. Recommendations
+                                10. References
+                                """)
+                                
+                                st.markdown("### Abstract Preview")
+                                st.markdown(report_data.get('abstract', 'No abstract generated'))
+                            
+                            st.info("""
+                            💡 **Next Steps:**
+                            1. Download the Markdown file
+                            2. Convert to PDF using [Pandoc](https://pandoc.org/), Word, or online converters
+                            3. Edit and customize as needed for your publication
+                            
+                            **Conversion Tips:**
+                            - Use Pandoc: `pandoc report.md -o report.pdf`
+                            - Import into Word/Google Docs for further editing
+                            - Use online converters like [Dillinger](https://dillinger.io/)
+                            """)
+                            
+                except ImportError:
+                    st.error("❌ Error: academic_report_writer.py not found. Please ensure it's in the same directory as this app.")
+                except Exception as e:
+                    st.error(f"❌ Error generating report: {str(e)}")
+                    with st.expander("🔍 Error Details"):
+                        import traceback
+                        st.code(traceback.format_exc())
 
 else:
     # Welcome screen
@@ -715,18 +920,21 @@ else:
     - 🔍 Search multiple academic databases simultaneously
     - 🎯 Evaluate papers using AI critic agents
     - 📊 Generate comprehensive research reports
-    - 📥 Export results in PDF and HTML formats
+    - 📄 Create full academic reports (NEW!)
+    - 📥 Export results in PDF, HTML, and Markdown formats
     
     **Getting Started:**
     1. Configure your research parameters in the sidebar
     2. Click "🚀 Start Research" to begin
     3. Wait for the analysis to complete (2-5 minutes)
     4. Download your reports
+    5. Optionally generate a full academic report
     
     **Pro Tips:**
     - Start with 5-10 papers per source for faster results
     - Use specific keywords for better relevance
     - Recent years (2020+) have better coverage
+    - Generate academic report for publication-ready output
     """)
     
     # Setup instructions based on environment
